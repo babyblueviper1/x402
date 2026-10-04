@@ -762,6 +762,22 @@ function assertEIP712PayloadShape(
 }
 
 /**
+ * Step 2 of §4.5 / §5.5: `payload.version` selects the EIP-712 types, and only version 1 is defined. Hashing a payload of any
+ * other version with the version-1 types would accept it under types it was never meant for, so it is rejected instead.
+ *
+ * @param payload - A payload that already passed assertEIP712PayloadShape
+ * @param kind - "offer" or "receipt", for the error message
+ */
+function assertSupportedEIP712Version(payload: unknown, kind: "offer" | "receipt"): void {
+  const v = (payload as Record<string, unknown>).version;
+  if (!(v === 1 || v === 1n)) {
+    throw new Error(
+      `Invalid ${kind}: unsupported version ${String(v)} (only version 1 is defined)`,
+    );
+  }
+}
+
+/**
  * Verify an EIP-712 signed offer and recover the signer address.
  * Does NOT verify signer authorization for the resourceUrl - see spec §4.5.1.
  *
@@ -775,6 +791,7 @@ export async function verifyOfferSignatureEIP712(
     throw new Error(`Expected eip712 format, got ${offer.format}`);
   }
   assertEIP712PayloadShape(offer.payload, OFFER_TYPES.Offer, "offer");
+  assertSupportedEIP712Version(offer.payload, "offer");
 
   const signer = await recoverTypedDataAddress({
     domain: createOfferDomain(),
@@ -801,6 +818,7 @@ export async function verifyReceiptSignatureEIP712(
     throw new Error(`Expected eip712 format, got ${receipt.format}`);
   }
   assertEIP712PayloadShape(receipt.payload, RECEIPT_TYPES.Receipt, "receipt");
+  assertSupportedEIP712Version(receipt.payload, "receipt");
 
   const signer = await recoverTypedDataAddress({
     domain: createReceiptDomain(),

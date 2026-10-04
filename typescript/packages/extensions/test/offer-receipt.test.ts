@@ -438,6 +438,36 @@ describe("x402 Offer/Receipt Extension", () => {
       const { signer } = await verifyOfferSignatureEIP712(offer);
       expect(signer.toLowerCase()).toBe(account.address.toLowerCase());
     });
+
+    it("a correctly signed offer with version 2 rejects (only version 1 is defined, §4.5 step 2)", async () => {
+      const offer = await createOfferEIP712("https://api.example.com/resource", offerInput, p =>
+        account.signTypedData(p),
+      );
+      const payload = { ...offer.payload, version: 2 };
+      const signature = await account.signTypedData({
+        domain: createOfferDomain(),
+        types: OFFER_TYPES,
+        primaryType: "Offer",
+        message: prepareOfferForEIP712(payload) as unknown as Record<string, unknown>,
+      });
+      await expect(verifyOfferSignatureEIP712({ ...offer, payload, signature })).rejects.toThrow(
+        "Invalid offer: unsupported version 2 (only version 1 is defined)",
+      );
+    });
+
+    it("a correctly signed receipt with version 2 rejects (only version 1 is defined, §5.5 step 2)", async () => {
+      const receipt = await createReceiptEIP712(receiptInput, p => account.signTypedData(p));
+      const payload = { ...receipt.payload, version: 2 };
+      const signature = await account.signTypedData({
+        domain: createReceiptDomain(),
+        types: RECEIPT_TYPES,
+        primaryType: "Receipt",
+        message: prepareReceiptForEIP712(payload) as unknown as Record<string, unknown>,
+      });
+      await expect(
+        verifyReceiptSignatureEIP712({ ...receipt, payload, signature }),
+      ).rejects.toThrow("Invalid receipt: unsupported version 2 (only version 1 is defined)");
+    });
   });
 
   describe("JCS Canonicalization (RFC 8785)", () => {
