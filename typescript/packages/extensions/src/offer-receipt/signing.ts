@@ -762,13 +762,16 @@ function assertEIP712PayloadShape(
 }
 
 /**
- * Step 2 of §4.5 / §5.5: `payload.version` selects the EIP-712 types, and only version 1 is defined. Hashing a payload of any
- * other version with the version-1 types would accept it under types it was never meant for, so it is rejected instead.
+ * Step 2 of §4.5 / §5.5 (EIP-712), step 3 of the same sections (JWS): `payload.version` determines how the remaining fields
+ * are interpreted, and only version 1 is defined. For EIP-712 this also selects the typed-data types, so hashing a payload of
+ * any other version with the version-1 types would accept it under types it was never meant for; for JWS the signature
+ * already covers the raw payload bytes regardless of version, so this check is the only thing that enforces the "currently
+ * only version 1 is defined" requirement on that path. Shared by both formats so neither can silently diverge from the other.
  *
- * @param payload - A payload that already passed assertEIP712PayloadShape
+ * @param payload - A payload that already passed assertEIP712PayloadShape (EIP-712) or signature verification (JWS)
  * @param kind - "offer" or "receipt", for the error message
  */
-function assertSupportedEIP712Version(payload: unknown, kind: "offer" | "receipt"): void {
+function assertSupportedVersion(payload: unknown, kind: "offer" | "receipt"): void {
   const v = (payload as Record<string, unknown>).version;
   if (!(v === 1 || v === 1n)) {
     throw new Error(
@@ -791,7 +794,7 @@ export async function verifyOfferSignatureEIP712(
     throw new Error(`Expected eip712 format, got ${offer.format}`);
   }
   assertEIP712PayloadShape(offer.payload, OFFER_TYPES.Offer, "offer");
-  assertSupportedEIP712Version(offer.payload, "offer");
+  assertSupportedVersion(offer.payload, "offer");
 
   const signer = await recoverTypedDataAddress({
     domain: createOfferDomain(),
@@ -818,7 +821,7 @@ export async function verifyReceiptSignatureEIP712(
     throw new Error(`Expected eip712 format, got ${receipt.format}`);
   }
   assertEIP712PayloadShape(receipt.payload, RECEIPT_TYPES.Receipt, "receipt");
-  assertSupportedEIP712Version(receipt.payload, "receipt");
+  assertSupportedVersion(receipt.payload, "receipt");
 
   const signer = await recoverTypedDataAddress({
     domain: createReceiptDomain(),
@@ -849,7 +852,9 @@ export async function verifyOfferSignatureJWS(
   }
   const key = await resolveVerificationKey(offer.signature, publicKey);
   const { payload } = await jose.compactVerify(offer.signature, key);
-  return JSON.parse(new TextDecoder().decode(payload)) as OfferPayload;
+  const decoded = JSON.parse(new TextDecoder().decode(payload)) as OfferPayload;
+  assertSupportedVersion(decoded, "offer");
+  return decoded;
 }
 
 /**
@@ -870,7 +875,9 @@ export async function verifyReceiptSignatureJWS(
   }
   const key = await resolveVerificationKey(receipt.signature, publicKey);
   const { payload } = await jose.compactVerify(receipt.signature, key);
-  return JSON.parse(new TextDecoder().decode(payload)) as ReceiptPayload;
+  const decoded = JSON.parse(new TextDecoder().decode(payload)) as ReceiptPayload;
+  assertSupportedVersion(decoded, "receipt");
+  return decoded;
 }
 
 /**
