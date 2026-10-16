@@ -483,6 +483,8 @@ A commitment made with any authorizer other than the receipt's `payer` opens to 
 
 The commitment adds no new pinpointing. A receipt and its offer already carry `payer`, `resourceUrl`, `payTo` and `amount`, which narrow the on-chain candidates. Without the salt the commitment narrows them no further. `transaction` turns the narrowed set into a single row; the commitment does not. It is not unlinkability.
 
+Before it is opened, a commitment is a statement by the receipt's signer, and it is unique per receipt, not per payment: the signer can issue two receipts with different salts for one settlement, or a commitment that opens to no settlement. Only opening ties a receipt to exactly one identifier. A consumer that counts settlements, for example a deduplicated or Sybil-resistant count, MUST count opened commitments only.
+
 Test vectors (commit, link, attacks on unsalted and derived salts, malformed input) and a live checker built from two Base Sepolia settlements: [x402-receipt-authorization-commitment](https://github.com/babyblueviper1/preaction-governance-conformance/tree/0a818e7/examples/x402-receipt-authorization-commitment).
 
 **6. Protocol Integration Examples**
