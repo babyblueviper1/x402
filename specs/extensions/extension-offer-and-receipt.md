@@ -451,8 +451,9 @@ authorizationCommitment = "0x" || hex( SHA-256( "x402-receipt-authorization/0" |
 |---|---|---|---|
 | `eip3009` | token contract of the accepted payment requirements | `from` of the authorization | the ERC-3009 `nonce` |
 
-- Every field after `method` has a fixed length, so the preimage is unambiguous. Hex inputs are case-insensitive and are decoded to bytes before hashing.
-- A payment whose rail has no identifier that the server holds before settlement MUST omit both fields (empty strings under EIP-712). The fields MUST NOT be reused with a different meaning. New rails are added as new `authorizationMethod` values with their own layout.
+- Every field after `method` has a fixed length, so the preimage is unambiguous. Each method's row fixes the lengths of `asset` and `authorizer`. `identifier` and `salt` are always exactly 32 bytes, for every method. Hex inputs are case-insensitive and are decoded to bytes before hashing.
+- A rail whose native identifier is not exactly 32 bytes (for example a variable-length memo) MUST define `identifier` as `SHA-256(native identifier bytes)`. Its link procedure hashes each candidate the same way before recomputing the commitment. A new method never adds a variable-length field to the preimage.
+- A payment whose rail has no identifier that the server holds before settlement MUST omit both fields (empty strings under EIP-712). The fields MUST NOT be reused with a different meaning. New rails are added as new `authorizationMethod` values with their own layout. A method's definition MUST state how its identifier is unique per settlement. If the identifier can repeat across settlements, the commitment opens to several of them and §5.6.4 step 3 fails closed.
 
 **5.6.3 Salt**
 
