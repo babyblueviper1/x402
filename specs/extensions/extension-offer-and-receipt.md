@@ -477,6 +477,10 @@ A verifier holding the receipt, its salt and the asset. `asset` is the token con
 3. Recomputes the commitment for each returned nonce. Exactly one MUST match; otherwise the receipt does not link.
 4. MAY confirm `authorizationState(authorizer, nonce)` returns `true`, and MAY read the matching transaction for amount and payee.
 
+A verifier that cannot obtain the candidate set MUST report that separately from a candidate set that contains no match. The first is an incomplete check; only the second is a receipt that does not link. A failed or rate-limited log query that returns an empty list is the first case, not the second, and a consumer counting settlements (§5.6.5) MUST NOT drop the receipt on it.
+
+Note (non-normative): step 2 needs no unbounded scan back from the chain head. The receipt is signed close to its settlement, before or after it (§5.6.3: the seller holds the nonce before settlement runs), so a verifier can query a window around the receipt's `issuedAt` and widen it only if no candidate matches. On public RPC endpoints that cap `eth_getLogs` ranges, this bounds the number of requests.
+
 A commitment made with any authorizer other than the receipt's `payer` opens to no nonce. It leaves the receipt unlinkable, as if the field were absent, and never produces a false link.
 
 **5.6.5 What it does and does not claim**
