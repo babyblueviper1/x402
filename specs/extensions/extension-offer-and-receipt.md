@@ -79,7 +79,7 @@ Where `name` is:
 The `chainId` is hardcoded to `1` (Ethereum mainnet) for all EIP-712 signatures in this extension. This is intentional: EIP-712 is used here purely as an off-chain signing format, not for on-chain transaction submission. The payment network is already identified by the `network` field in the payload. Using a constant `chainId` ensures EIP-712 signing works uniformly regardless of the payment network (including non-EVM networks like Solana).
 
 > **Versioning note:** EIP-712 artifacts have two distinct version fields:
-> - **Domain `version`** (string `"1"`): Indicates the EIP-712 schema version. Changing the canonical `types` or `primaryType` requires bumping this version.
+> - **Domain `version`** (string `"1"`): Indicates the EIP-712 schema version. A change to the canonical `types` or `primaryType` is a breaking change and MUST be versioned (§3.2.1), either by bumping this version or by a new payload `version` whose types verifiers select by that value. Receipt payload version `2` (§5.3) takes the second route, so the domain `version` stays `"1"`.
 > - **Payload `version`** (integer `1`): Indicates the offer/receipt semantic version. This field is part of the signed payload and travels with the artifact for use outside x402.
 
 **3.2.1 EIP-712 Schema Is Normative and Not Transmitted**
@@ -89,7 +89,7 @@ For `format = "eip712"`, the signing digest is computed using the EIP-712 domain
 - The canonical `types` and `primaryType` definitions MUST NOT be included in transmitted x402 messages (offers/receipts).
 - Signers MUST use the canonical `types` and `primaryType` definitions from this specification when producing EIP-712 signatures.
 - Verifiers MUST obtain and use the same canonical `types` and `primaryType` definitions from this specification when verifying EIP-712 signatures.
-- Because EIP-712 hashes the schema into the signature, any change to the canonical `types` or `primaryType` constitutes a breaking change and MUST be accompanied by explicit versioning (e.g., bumping the EIP-712 domain `version` or publishing a new spec version).
+- Because EIP-712 hashes the schema into the signature, any change to the canonical `types` or `primaryType` constitutes a breaking change and MUST be accompanied by explicit versioning (e.g., bumping the EIP-712 domain `version`, defining a new payload `version` with its own types, or publishing a new spec version).
 
 > **Non-normative note:** Conceptually, EIP-712 maps to JWS as follows: `domain` ≈ signing context (like a header), `message` ≈ payload, `signature` ≈ signature. The EIP-712 schema (`types` and `primaryType`) is "implicit" only in the sense that it is not transmitted on the wire — it is not optional.
 
@@ -337,7 +337,7 @@ For the optional `transaction` field, implementations MUST set unused fields to 
 ]
 ```
 
-Verifiers select the types by `payload.version` (§5.5). The empty-string rule above applies to both new fields: a version `2` receipt with no commitment sets both to `""`.
+Verifiers select the types by `payload.version` (§5.5). The empty-string rule above applies to both new fields: a version `2` receipt with no commitment sets both to `""`. Signers MUST set both fields or neither. A receipt with exactly one of them non-empty is malformed: a verifier MUST report it as malformed and MUST NOT attempt a link. A receipt whose `authorizationMethod` the verifier does not implement is not malformed; the link is not attempted.
 
 **5.4 Receipt Examples**
 
@@ -480,6 +480,17 @@ A verifier holding the receipt, its salt and the asset. `asset` is the token con
 A verifier that cannot obtain the candidate set MUST report that separately from a candidate set that contains no match. The first is an incomplete check; only the second is a receipt that does not link. A failed or rate-limited log query that returns an empty list is the first case, not the second, and a consumer counting settlements (§5.6.5) MUST NOT drop the receipt on it.
 
 Note (non-normative): step 2 needs no unbounded scan back from the chain head. The receipt is signed close to its settlement, before or after it (§5.6.3: the seller holds the nonce before settlement runs), so a verifier can query a window around the receipt's `issuedAt` and widen it only if no candidate matches. On public RPC endpoints that cap `eth_getLogs` ranges, this bounds the number of requests. Its cost grows with the window, not with the authorizer's history. The alternative is to fetch the authorizer's full set of consumed nonces: it needs no `issuedAt` and cannot miss on clock skew, but its cost grows with how many authorizations that authorizer has ever used. Either is conformant; an implementer should know which trade they are taking.
+
+Results. A link check reports exactly one of:
+
+- `linked`: the candidate set was obtained and exactly one candidate matches.
+- `no_match`: the candidate set was obtained and no candidate, or more than one, matches. The receipt does not link.
+- `incomplete`: the candidate set could not be obtained.
+- `not_attempted`: no commitment is present, the method is not implemented, or the salt or asset is not held.
+- `malformed`: exactly one of `authorizationMethod` and `authorizationCommitment` is non-empty (§5.3).
+- `inconsistent`: the commitment links, and `transaction` is non-empty and names a different transaction than the one that consumed the matched identifier.
+
+`no_match` is a statement about the salt and asset the verifier used. A wrong salt, a wrong asset and a commitment that opens to nothing give the same result, and by the hiding property of §5.6.2 a verifier cannot tell them apart. It is evidence against the signer only when the salt and asset are the ones the signer itself returned (§5.6.3) or signed (the offer). For `inconsistent`, both values are signed by the same party, so the receipt asserts two settlements; a verifier MUST NOT link it to either and MUST NOT count it under §5.6.5.
 
 A commitment made with any authorizer other than the receipt's `payer` opens to no nonce. It leaves the receipt unlinkable, as if the field were absent, and never produces a false link.
 
